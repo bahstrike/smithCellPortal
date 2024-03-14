@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33502.453
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "smithCellPortal", "smithCellPortal.vcxproj", "{9FC6494A-44EB-4E70-AF12-682B2259BD23}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x86 = Debug|x86
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9FC6494A-44EB-4E70-AF12-682B2259BD23}.Debug|x86.ActiveCfg = Debug|Win32
+		{9FC6494A-44EB-4E70-AF12-682B2259BD23}.Debug|x86.Build.0 = Debug|Win32
+		{9FC6494A-44EB-4E70-AF12-682B2259BD23}.Release|x86.ActiveCfg = Release|Win32
+		{9FC6494A-44EB-4E70-AF12-682B2259BD23}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {39C28DBD-C5A8-4A13-8241-105CB2F9A5A7}
+	EndGlobalSection
+EndGlobal
