@@ -1,5 +1,7 @@
 #include "smith.h"
 
+void PerformClip();
+
 extern "C"
 {
 	SMITHCALLS* smith = nullptr;
@@ -35,6 +37,8 @@ extern "C"
 		smith = nullptr;
 	}
 
-
-
+	void __cdecl whatever()
+	{
+		PerformClip();
+	}
 }

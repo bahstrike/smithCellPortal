@@ -141,6 +141,7 @@ copy $(OutputPath)\smithCellPortal.dll c:\smith\</Command>
     <None Include="smithCellPortal.def" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="jkcp.cpp" />
     <ClCompile Include="smithCellPortal.cpp" />
   </ItemGroup>
   <ItemGroup>
