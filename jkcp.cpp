@@ -40,13 +40,6 @@ void rdMatrix_TransformPoint34(rdVector3* vOut, const rdVector3* vIn, const rdMa
     vOut->z = camera->uvec.z * vIn->z + camera->lvec.z * vIn->y + camera->rvec.z * vIn->x + camera->scale.z;
 }
 
-struct rdVertexIdxInfo
-{
-    unsigned int numVertices;
-    int* vertexPosIdx;
-    rdVector3* vertices;
-};
-
 struct rdMeshinfo
 {
     int numVertices;
@@ -68,90 +61,50 @@ struct rdClipFrustum
     float nearLeft;
 };
 
-struct rdTexinfoHeader
-{
-    int texture_type;
-};
-
-struct rdTexture
-{
-    int alpha_en;
-};
-
-struct rdTexinfo
-{
-    rdTexinfoHeader header;
-    rdTexture* texture_ptr;
-};
-
-struct rdMaterial
-{
-    int celIdx;
-    rdTexinfo* texinfos[16];
-};
-
 struct sithSector;
-struct sithSurface;
 
 struct sithAdjoin
 {
     unsigned int flags;
     sithSector* sector;
-    sithSurface* surface;
     sithAdjoin* mirror;
     sithAdjoin* next;
     float dist;
-};
 
-struct sithSector
-{
-    int flags;
     int renderTick;
-    int clipVisited;
-    sithAdjoin* adjoins;
-    rdClipFrustum* clipFrustum;
-};
 
-struct rdFace
-{
     int type;
     int geometryMode;
     int numVertices;
     int* vertexPosIdx;
-    rdMaterial* material;
-    int wallCel;
+    int matCelAlpha;
     rdVector3 normal;
 };
 
-struct sithSurfaceInfo
-{
-    rdFace face;
-};
-
-struct sithSurface
+struct sithSector
 {
     int renderTick;
-    sithSurfaceInfo surfaceInfo;
-};
-
-struct rdCanvas
-{
-    float screen_height_half;
-    float screen_width_half;
+    int clipVisited;
+    sithAdjoin* adjoins;
 };
 
 struct rdCamera
 {
-    rdCanvas* canvas;
+    float screen_height_half;
+    float screen_width_half;
+
     rdMatrix34 view_matrix;
     rdClipFrustum* cameraClipFrustum;
     float fov_y;
     float screenAspectRatio;
 
+    sithSector* sector;
+    rdVector3 vec3_1;
+
     void rdCamera_PerspProject(rdVector3* out, rdVector3* v)
     {
-        out->x = (fov_y / v->y) * v->x + canvas->screen_height_half;
-        out->y = canvas->screen_width_half - (jkPlayer_enableOrigAspect ? screenAspectRatio : 1.0f) * (fov_y / v->y) * v->z;
+        out->x = (fov_y / v->y) * v->x + screen_height_half;
+        out->y = screen_width_half - (jkPlayer_enableOrigAspect ? screenAspectRatio : 1.0f) * (fov_y / v->y) * v->z;
         out->z = v->y;
     }
 
@@ -173,24 +126,12 @@ struct sithWorld
     rdVector3* verticesTransformed;
 };
 
-struct sithCamera
-{
-    sithSector* sector;
-    rdVector3 vec3_1;
-};
+sithWorld* g_pWorld = nullptr;
+rdCamera* g_pCamera = nullptr;
 
-rdCamera* rdCamera_pCurCamera;
-int sithRender_numSectors;
+int sithRender_numSectors = 0;
 #define SITH_MAX_VISIBLE_SECTORS 1024
 sithSector* sithRender_aSectors[SITH_MAX_VISIBLE_SECTORS];
-rdClipFrustum sithRender_clipFrustums[SITH_MAX_VISIBLE_SECTORS];
-int sithRender_numClipFrustums;
-#define SITH_MAX_VISIBLE_SECTORS_2 (1280)
-sithSector* sithRender_aSectors2[SITH_MAX_VISIBLE_SECTORS_2 + 2];
-int sithRender_numSectors2;
-rdVertexIdxInfo sithRender_idxInfo;
-sithWorld* sithWorld_pCurrentWorld;
-sithCamera* sithCamera_currentCamera;
 
 int sithRender_adjoinSafeguard;
 
@@ -629,9 +570,8 @@ int rdClip_Face3W(rdClipFrustum* frustum, rdVector3* vertices, int numVertices)
     return v5;
 }
 
-void rdPrimit3_ClipFace(rdClipFrustum* clipFrustum, rdVertexIdxInfo* idxInfo, rdMeshinfo* mesh_out)
+void rdPrimit3_ClipFace(rdClipFrustum* clipFrustum, sithAdjoin* pAdjoin, rdMeshinfo* mesh_out)
 {
-    rdVertexIdxInfo* v7; // eax
     rdMeshinfo* v8; // ebx
     int v9; // esi
     rdVector3* v10; // edi
@@ -641,15 +581,14 @@ void rdPrimit3_ClipFace(rdClipFrustum* clipFrustum, rdVertexIdxInfo* idxInfo, rd
     rdVector3* v14; // ebx
     int idxInfoa; // [esp+38h] [ebp+14h]
 
-    v7 = idxInfo;
     v8 = mesh_out;
-    v9 = idxInfo->numVertices;
-    idxInfoa = idxInfo->numVertices;
+    v9 = pAdjoin->numVertices;
+    idxInfoa = pAdjoin->numVertices;
     if (idxInfoa)
     {
-        v10 = v7->vertices;
+        v10 = g_pWorld->verticesTransformed;//v7->vertices;
         v11 = mesh_out->verticesProjected;
-        v12 = v7->vertexPosIdx;
+        v12 = pAdjoin->vertexPosIdx;
         do
         {
             v13 = *v12;
@@ -674,20 +613,17 @@ int rdCamera_BuildClipFrustum(rdCamera* camera, rdClipFrustum* outClip, signed i
     //jk_printf("%u %u %u %u\n", height, width, height2, width2);
 
     rdClipFrustum* cameraClip = camera->cameraClipFrustum;
-    rdCanvas* canvas = camera->canvas;
-    if (!canvas)
-        return 0;
 
 #ifdef QOL_IMPROVEMENTS
     float overdraw = 1.0; // Added: HACK for 1px off on the bottom of the screen
 #else
     float overdraw = 0.0;
 #endif
-    float project_width_half = overdraw + canvas->screen_width_half - ((double)width - 0.5);
-    float project_height_half = overdraw + canvas->screen_height_half - ((double)height - 0.5);
+    float project_width_half = overdraw + camera->screen_width_half - ((double)width - 0.5);
+    float project_height_half = overdraw + camera->screen_height_half - ((double)height - 0.5);
 
-    float project_width_half_2 = -canvas->screen_width_half + ((double)width2 - 0.5);
-    float project_height_half_2 = -canvas->screen_height_half + ((double)height2 - 0.5);
+    float project_width_half_2 = -camera->screen_width_half + ((double)width2 - 0.5);
+    float project_height_half_2 = -camera->screen_height_half + ((double)height2 - 0.5);
 
     rdVector_Copy3(&outClip->field_0, &cameraClip->field_0);
 
@@ -720,20 +656,16 @@ int rdCamera_BuildClipFrustum(rdCamera* camera, rdClipFrustum* outClip, signed i
 
 void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
 {
-    rdClipFrustum* frustum; // edx
     sithAdjoin* adjoinIter; // ebx
-    sithSurface* adjoinSurface; // esi
-    rdMaterial* adjoinMat; // eax
     rdVector3* v20; // eax
     int v25; // eax
     rdClipFrustum* v31; // ecx
     rdClipFrustum outClip; // [esp+Ch] [ebp-74h] BYREF
     int v45; // [esp+4Ch] [ebp-34h]
-    rdTexinfo* v51; // [esp+64h] [ebp-1Ch]
 
     if (sector->renderTick == sithRender_lastRenderTick)
     {
-        sector->clipFrustum = rdCamera_pCurCamera->cameraClipFrustum;
+        //sector->clipFrustum = rdCamera_pCurCamera->cameraClipFrustum;
     }
     else
     {
@@ -743,17 +675,17 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
 
         sithRender_aSectors[sithRender_numSectors++] = sector;
 
-        frustum = &sithRender_clipFrustums[sithRender_numClipFrustums++];
-        memcpy(frustum, frustumArg, sizeof(rdClipFrustum));
+        //frustum = &sithRender_clipFrustums[sithRender_numClipFrustums++];
+        //memcpy(frustum, frustumArg, sizeof(rdClipFrustum));
         
-        sector->clipFrustum = frustum;
+        //sector->clipFrustum = frustum;
         
-        sithRender_aSectors2[sithRender_numSectors2++] = sector;
+        //sithRender_aSectors2[sithRender_numSectors2++] = sector;
     }
 
 
     v45 = sector->clipVisited;
-    sithRender_idxInfo.vertices = sithWorld_pCurrentWorld->verticesTransformed;
+    //sithRender_idxInfo.vertices = g_pWorld->verticesTransformed;
     sector->clipVisited = 1;
 
     // Added: safeguard
@@ -768,55 +700,39 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
         if (++sithRender_adjoinSafeguard >= 0x100000)
             break;
 
-        adjoinSurface = adjoinIter->surface;
-        adjoinMat = adjoinSurface->surfaceInfo.face.material;
-        if (adjoinMat)
-        {
-            int v19 = adjoinSurface->surfaceInfo.face.wallCel;
-            if (v19 == -1)
-                v19 = adjoinMat->celIdx;
-            v51 = adjoinMat->texinfos[v19];
-        }
-        else {
-            v51 = NULL; // Added. TODO: does setting this to NULL cause issues?
-        }
+        v20 = &g_pWorld->vertices[*adjoinIter->vertexPosIdx];
+        float dist = (g_pCamera->vec3_1.y - v20->y) * adjoinIter->normal.y
+            + (g_pCamera->vec3_1.z - v20->z) * adjoinIter->normal.z
+            + (g_pCamera->vec3_1.x - v20->x) * adjoinIter->normal.x;
 
-        v20 = &sithWorld_pCurrentWorld->vertices[*adjoinSurface->surfaceInfo.face.vertexPosIdx];
-        float dist = (sithCamera_currentCamera->vec3_1.y - v20->y) * adjoinSurface->surfaceInfo.face.normal.y
-            + (sithCamera_currentCamera->vec3_1.z - v20->z) * adjoinSurface->surfaceInfo.face.normal.z
-            + (sithCamera_currentCamera->vec3_1.x - v20->x) * adjoinSurface->surfaceInfo.face.normal.x;
-
-        if (dist > 0.0 || (dist == 0.0 && sector == sithCamera_currentCamera->sector))
+        if (dist > 0.0 || (dist == 0.0 && sector == g_pCamera->sector))
         {
-            if (adjoinSurface->renderTick != sithRender_lastRenderTick)
+            if (adjoinIter->renderTick != sithRender_lastRenderTick)
             {
-                for (int i = 0; i < adjoinSurface->surfaceInfo.face.numVertices; i++)
+                for (int i = 0; i < adjoinIter->numVertices; i++)
                 {
-                    v25 = adjoinSurface->surfaceInfo.face.vertexPosIdx[i];
-                    if (sithWorld_pCurrentWorld->renderTick != sithRender_lastRenderTick)
+                    v25 = adjoinIter->vertexPosIdx[i];
+                    if (g_pWorld->renderTick != sithRender_lastRenderTick)
                     {
-                        rdMatrix_TransformPoint34(&sithWorld_pCurrentWorld->verticesTransformed[v25], &sithWorld_pCurrentWorld->vertices[v25], &rdCamera_pCurCamera->view_matrix);
-                        sithWorld_pCurrentWorld->renderTick = sithRender_lastRenderTick;
+                        rdMatrix_TransformPoint34(&g_pWorld->verticesTransformed[v25], &g_pWorld->vertices[v25], &g_pCamera->view_matrix);
+                        g_pWorld->renderTick = sithRender_lastRenderTick;
                     }
                 }
-                adjoinSurface->renderTick = sithRender_lastRenderTick;
+                adjoinIter->renderTick = sithRender_lastRenderTick;
             }
             else {
                 // Added?
                 //continue;
             }
-            sithRender_idxInfo.numVertices = adjoinSurface->surfaceInfo.face.numVertices;
-            sithRender_idxInfo.vertexPosIdx = adjoinSurface->surfaceInfo.face.vertexPosIdx;
+
             meshinfo_out.verticesProjected = sithRender_aVerticesTmp;
 
-            rdPrimit3_ClipFace(frustumArg, &sithRender_idxInfo, &meshinfo_out);
+            rdPrimit3_ClipFace(frustumArg, adjoinIter, &meshinfo_out);
 
 
-                int bAdjoinIsTransparent = (((!adjoinSurface->surfaceInfo.face.material ||
-                    (adjoinSurface->surfaceInfo.face.geometryMode == 0)) ||
-                    ((adjoinSurface->surfaceInfo.face.type & 2))) ||
-                    (v51 && (v51->header.texture_type & 8) && (v51->texture_ptr->alpha_en & 1))
-                    );
+            int bAdjoinIsTransparent = (adjoinIter->geometryMode == 0) ||
+                                        ((adjoinIter->type & 2) != 0) ||
+                                        (adjoinIter->matCelAlpha != 0);
 
 #ifdef QOL_IMPROVEMENTS
             // Added: Somehow the clipping changed enough to cause a bug in MoTS Lv12.
@@ -849,7 +765,7 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
             if ((((unsigned int)meshinfo_out.numVertices >= 3u) || (rdClip_faceStatus & 0x40))
                 && ((rdClip_faceStatus & 0x41) || ((adjoinIter->flags & 1) && bAdjoinIsTransparent)))
             {
-                rdCamera_pCurCamera->projectLst(sithRender_aVerticesTmp_projected, sithRender_aVerticesTmp, meshinfo_out.numVertices);
+                g_pCamera->projectLst(sithRender_aVerticesTmp_projected, sithRender_aVerticesTmp, meshinfo_out.numVertices);
 
                 v31 = frustumArg;
 
@@ -893,7 +809,7 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
                     float v47 = minY - 2.0;//ceilf(minY);
                     float v46 = minX - 2.0;//ceilf(minX);
 
-                    rdCamera_BuildClipFrustum(rdCamera_pCurCamera, &outClip, (int)(v46 - -0.5), (int)(v47 - -0.5), (int)v48, (int)v49);
+                    rdCamera_BuildClipFrustum(g_pCamera, &outClip, (int)(v46 - -0.5), (int)(v47 - -0.5), (int)v48, (int)v49);
                     v31 = &outClip;
                 }
 
@@ -909,11 +825,42 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
     sector->clipVisited = v45;
 }
 
-
-
-void PerformClip()
+extern "C"
 {
-    sithRender_adjoinSafeguard = 0;
+    void __cdecl CPShutdown()
+    {
+        if (g_pWorld != nullptr)
+        {
+            delete[] g_pWorld->verticesTransformed;
+            delete[] g_pWorld->vertices;
 
-    sithRender_Clip(sithCamera_currentCamera->sector, rdCamera_pCurCamera->cameraClipFrustum, 0.0);
+            delete g_pWorld;
+            g_pWorld = nullptr;
+        }
+    }
+
+    void __cdecl CPInitialize(int numVertices, float* pVertices)
+    {
+        CPShutdown();
+
+        g_pWorld = new sithWorld;
+        g_pWorld->vertices = new rdVector3[numVertices];
+        for (int x = 0; x < numVertices; x++)
+        {
+            float* v = &pVertices[x * 3];
+
+            g_pWorld->vertices[x].x = v[0];
+            g_pWorld->vertices[x].y = v[1];
+            g_pWorld->vertices[x].z = v[2];
+        }
+        g_pWorld->verticesTransformed = new rdVector3[numVertices];// i think
+    }
+
+
+    void __cdecl CPSolve()
+    {
+        sithRender_adjoinSafeguard = 0;
+
+        sithRender_Clip(g_pCamera->sector, g_pCamera->cameraClipFrustum, 0.0);
+    }
 }

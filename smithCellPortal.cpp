@@ -15,7 +15,7 @@ extern "C"
 		strcpy(p.homepageURL, "https://github.com/bahstrike/smithCellPortal");
 		p.smithRequiredVer = SMITHVERSION;
 		p.ver = 100;
-		//p.purpose = PP_TEXTUREUPSCALE;
+		p.purpose = PP_CELLPORTAL;
 
 		//p.authoritykey
 
@@ -30,15 +30,13 @@ extern "C"
 		return true;
 	}
 
+	void __cdecl CPShutdown();
+
 	void __cdecl ShutdownPlugin()
 	{
-		
+		CPShutdown();
 
 		smith = nullptr;
 	}
 
-	void __cdecl whatever()
-	{
-		PerformClip();
-	}
 }

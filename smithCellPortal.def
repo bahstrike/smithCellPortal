@@ -3,3 +3,6 @@ EXPORTS
 	SmithQueryPlugin
 	InitializePlugin
 	ShutdownPlugin
+	CPInitialize
+	CPShutdown
+	CPSolve

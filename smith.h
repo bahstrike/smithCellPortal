@@ -58,6 +58,7 @@
 #define PP_SMACKERCUTSCENE		0x0002
 #define PP_SMUSHCUTSCENE		0x0004
 #define PP_GENERATENORMAL		0x0008
+#define PP_CELLPORTAL			0x0010
 
 struct PLUGININFO
 {
@@ -106,7 +107,7 @@ extern "C"// this helps prevent name mangling on ur exported symbols
 	// final note:  smith will spin up a discardable cog VM to execute this code and thats it.
 	// you wont have access to any symbols or existing variables. as well, you should not record the (temporary) self cog ID.
 	// your cog can, however, send triggers .. or messages to other cogs via their IDs .. and that should be fine.
-	typedef void(__cdecl *dExecuteCOG)(const char* szCOGScript, const char* szSourceRef, const char* szSenderRef, const char* szSenderID, const char* szParam0, const char* szParam1, const char* szParam2, const char* szParam3, char* szReturn);
+	typedef void(__cdecl* dExecuteCOG)(const char* szCOGScript, const char* szSourceRef, const char* szSenderRef, const char* szSenderID, const char* szParam0, const char* szParam1, const char* szParam2, const char* szParam3, char* szReturn);
 
 
 
@@ -114,7 +115,7 @@ extern "C"// this helps prevent name mangling on ur exported symbols
 	// you should probably check this if you decide to try to issue in-game related functions at a weird moment like
 	// ShutdownPlugin (not recommended).  i cant gaurantee it wont crash if u do somethin like that. so basically call all
 	// game stuff in a callback that you know the game is running, or call IsInGame  to check first.
-	typedef int(__cdecl *dIsInGame)();
+	typedef int(__cdecl* dIsInGame)();
 
 
 
@@ -125,7 +126,7 @@ extern "C"// this helps prevent name mangling on ur exported symbols
 	// note:  when replacing an existing mat's pixeldata, it is acceptable to change the texture dimensions. despite JK's texture coords
 	// are in texels rather than 0-1,  smith remembers the original mat's dimensions so the scaling should work fine.  if you 
 	// generate a new mat via this call, the original mat dimensions will be that which you specify here.
-	typedef unsigned int(__cdecl *dGenerateMaterial)(const char* szMatName, const char* szColormap, int nCel, int width, int height, int depth, int stride, const void* pBitmap, const void* pEmissive);
+	typedef unsigned int(__cdecl* dGenerateMaterial)(const char* szMatName, const char* szColormap, int nCel, int width, int height, int depth, int stride, const void* pBitmap, const void* pEmissive);
 
 
 
@@ -136,7 +137,7 @@ extern "C"// this helps prevent name mangling on ur exported symbols
 	// note:  when replacing an existing mat's pixeldata, it is acceptable to change the texture dimensions. despite JK's texture coords
 	// are in texels rather than 0-1,  smith remembers the original mat's dimensions so the scaling should work fine.  if you 
 	// generate a new mat via this call, the original mat dimensions will be that which you specify here.
-	typedef unsigned int(__cdecl *dGenerateMaterialBitmap)(const char* szMatName, const char* szColormap, int nCel, int bAllowUpscale, HBITMAP hBitmap, HBITMAP hEmissive);
+	typedef unsigned int(__cdecl* dGenerateMaterialBitmap)(const char* szMatName, const char* szColormap, int nCel, int bAllowUpscale, HBITMAP hBitmap, HBITMAP hEmissive);
 
 	// uses smith's resource system to locate the desired game file; presuming it exists as a full file path
 	typedef int(__cdecl* dLocateDiskFile)(const char* szFileName, char* szFullPath);
@@ -297,6 +298,7 @@ struct SMITHCALLS
 
 // called by smith when finished playing smush cutscene.
 //void __cdecl smushDestroy(void* smush)
+
 
 
 #endif /*!_SMITH_H*/
