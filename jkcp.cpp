@@ -65,19 +65,20 @@ struct sithSector;
 
 struct sithAdjoin
 {
-    unsigned int flags;
+    //unsigned int flags;
     sithSector* sector;
     sithAdjoin* mirror;
     sithAdjoin* next;
     float dist;
 
     int renderTick;
+    int visible;
 
-    int type;
-    int geometryMode;
+    //int type;
+    //int geometryMode;
     int numVertices;
     int* vertexPosIdx;
-    int matCelAlpha;
+    //int matCelAlpha;
     rdVector3 normal;
 };
 
@@ -124,6 +125,10 @@ struct sithWorld
     int renderTick;
     rdVector3* vertices;
     rdVector3* verticesTransformed;
+    sithSector* sectors;
+    int numSectors;
+    sithAdjoin* adjoins;
+    int numAdjoins;
 };
 
 sithWorld* g_pWorld = nullptr;
@@ -730,9 +735,9 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
             rdPrimit3_ClipFace(frustumArg, adjoinIter, &meshinfo_out);
 
 
-            int bAdjoinIsTransparent = (adjoinIter->geometryMode == 0) ||
+            /*int bAdjoinIsTransparent = (adjoinIter->geometryMode == 0) ||
                                         ((adjoinIter->type & 2) != 0) ||
-                                        (adjoinIter->matCelAlpha != 0);
+                                        (adjoinIter->matCelAlpha != 0);*/
 
 #ifdef QOL_IMPROVEMENTS
             // Added: Somehow the clipping changed enough to cause a bug in MoTS Lv12.
@@ -762,8 +767,8 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
             bAdjoinIsTransparent |= bMirrorAdjoinIsTransparent;
 #endif
 
-            if ((((unsigned int)meshinfo_out.numVertices >= 3u) || (rdClip_faceStatus & 0x40))
-                && ((rdClip_faceStatus & 0x41) || ((adjoinIter->flags & 1) && bAdjoinIsTransparent)))
+            if ( (((unsigned int)meshinfo_out.numVertices >= 3u) || (rdClip_faceStatus & 0x40))
+                && ((rdClip_faceStatus & 0x41) || (adjoinIter->visible/*(adjoinIter->flags & 1) && bAdjoinIsTransparent*/)) )
             {
                 g_pCamera->projectLst(sithRender_aVerticesTmp_projected, sithRender_aVerticesTmp, meshinfo_out.numVertices);
 
@@ -831,6 +836,12 @@ extern "C"
     {
         if (g_pWorld != nullptr)
         {
+            for (int x = 0; x < g_pWorld->numAdjoins; x++)
+                delete[] g_pWorld->adjoins[x].vertexPosIdx;
+            delete[] g_pWorld->adjoins;
+
+            delete[] g_pWorld->sectors;
+
             delete[] g_pWorld->verticesTransformed;
             delete[] g_pWorld->vertices;
 
@@ -839,7 +850,25 @@ extern "C"
         }
     }
 
-    void __cdecl CPInitialize(int numVertices, float* pVertices)
+
+
+    struct SmithAdjoin
+    {
+        int sectorID;
+        int mirrorAdjoinID;
+        float dist;
+
+        int visible;
+
+        int numVertices;
+        int* vertexPosIdx;
+        float nx;
+        float ny;
+        float nz;
+    };
+
+
+    void __cdecl CPInitialize(int numVertices, float* pVertices, int numSectors, int numAdjoins, SmithAdjoin* pSmithAdjoins)
     {
         CPShutdown();
 
@@ -852,13 +881,91 @@ extern "C"
             g_pWorld->vertices[x].z = pVertices[x*3 + 2];
         }
         g_pWorld->verticesTransformed = new rdVector3[numVertices];// i think this should be same size.  dont bother initializing?
+
+        g_pWorld->sectors = new sithSector[numSectors];
+        g_pWorld->numSectors = numSectors;
+
+        g_pWorld->adjoins = new sithAdjoin[numAdjoins];
+        g_pWorld->numAdjoins = numAdjoins;
+        for (int x = 0; x < numAdjoins; x++)
+        {
+            const SmithAdjoin& ia = pSmithAdjoins[x];
+            sithAdjoin& oa = g_pWorld->adjoins[x];
+
+            oa.sector = &g_pWorld->sectors[ia.sectorID];
+            oa.mirror = &g_pWorld->adjoins[ia.mirrorAdjoinID];
+            oa.dist = ia.dist;
+
+            oa.visible = ia.visible;
+
+            if (ia.numVertices <= 0 || ia.numVertices > 200)
+            {
+                oa = oa;
+            }
+
+            oa.numVertices = ia.numVertices;
+            oa.vertexPosIdx = new int[ia.numVertices];
+            memcpy(oa.vertexPosIdx, ia.vertexPosIdx, ia.numVertices * sizeof(int));
+
+            oa.normal.x = ia.nx;
+            oa.normal.y = ia.ny;
+            oa.normal.z = ia.nz;
+        }
+
+        // now we need to form linked-lists within adjoins that map to sector..
+        for (int secID = 0; secID < numSectors; secID++)
+        {
+            sithSector* sec = &g_pWorld->sectors[secID];
+
+            sec->clipVisited = 0;
+            sec->renderTick = 0;
+
+            sithAdjoin* tail = nullptr;
+            for (int adjID = 0; adjID < numAdjoins; adjID++)
+            {
+                sithAdjoin* adj = &g_pWorld->adjoins[adjID];
+                if (adj->sector != sec)
+                    continue;
+
+                // if first one, set head in sector
+                if (sec->adjoins == nullptr)
+                    sec->adjoins = adj;
+
+                // link to previous tail (if exist)
+                if (tail != nullptr)
+                    tail->next = adj;
+
+                // this is new tail
+                tail = adj;
+                tail->next = nullptr;
+            }
+        }
+
     }
 
 
-    void __cdecl CPSolve()
+    void __cdecl CPSolve(int* pAdjoinVisible)
     {
         sithRender_adjoinSafeguard = 0;
 
-        sithRender_Clip(g_pCamera->sector, g_pCamera->cameraClipFrustum, 0.0);
+        // reset sector stuff
+        for (int x = 0; x < g_pWorld->numSectors; x++)
+        {
+            sithSector& sec = g_pWorld->sectors[x];
+            
+            sec.renderTick = 0;
+            sec.clipVisited = 0;
+        }
+
+        // reset and update adjoin stuff
+        for (int x = 0; x < g_pWorld->numAdjoins; x++)
+        {
+            sithAdjoin& adj = g_pWorld->adjoins[x];
+
+            adj.renderTick = 0;
+            adj.visible = pAdjoinVisible[x];
+        }
+
+        //sithRender_Clip(g_pCamera->sector, g_pCamera->cameraClipFrustum, 0.0);
     }
 }
