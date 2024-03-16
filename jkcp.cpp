@@ -847,13 +847,11 @@ extern "C"
         g_pWorld->vertices = new rdVector3[numVertices];
         for (int x = 0; x < numVertices; x++)
         {
-            float* v = &pVertices[x * 3];
-
-            g_pWorld->vertices[x].x = v[0];
-            g_pWorld->vertices[x].y = v[1];
-            g_pWorld->vertices[x].z = v[2];
+            g_pWorld->vertices[x].x = pVertices[x*3 + 0];
+            g_pWorld->vertices[x].y = pVertices[x*3 + 1];
+            g_pWorld->vertices[x].z = pVertices[x*3 + 2];
         }
-        g_pWorld->verticesTransformed = new rdVector3[numVertices];// i think
+        g_pWorld->verticesTransformed = new rdVector3[numVertices];// i think this should be same size.  dont bother initializing?
     }
 
 
