@@ -87,7 +87,7 @@ struct rdCamera
     float screen_width_half;
 
     rdMatrix34 view_matrix;
-    rdClipFrustum* cameraClipFrustum;
+    rdClipFrustum cameraClipFrustum;
     float fov_y;
     float screenAspectRatio;
 
@@ -609,7 +609,7 @@ int rdCamera_BuildClipFrustum(rdCamera* camera, rdClipFrustum* outClip, signed i
 {
     //jk_printf("%u %u %u %u\n", height, width, height2, width2);
 
-    rdClipFrustum* cameraClip = camera->cameraClipFrustum;
+    rdClipFrustum* cameraClip = &camera->cameraClipFrustum;
 
 #ifdef QOL_IMPROVEMENTS
     float overdraw = 1.0; // Added: HACK for 1px off on the bottom of the screen
@@ -840,6 +840,13 @@ extern "C"
             delete g_pWorld;
             g_pWorld = nullptr;
         }
+
+        if (g_pCamera != nullptr)
+        {
+
+            delete g_pCamera;
+            g_pCamera = nullptr;
+        }
     }
 
 
@@ -911,6 +918,7 @@ extern "C"
 
             sec->clipVisited = 0;
             sec->renderTick = 0;
+            sec->adjoins = nullptr;
 
             sithAdjoin* tail = nullptr;
             for (int adjID = 0; adjID < numAdjoins; adjID++)
@@ -935,10 +943,53 @@ extern "C"
 
     }
 
+    struct SmithCamera
+    {
+        float screen_height_half;
+        float screen_width_half;
 
-    void __cdecl CPSolve(int* pAdjoinVisible)
+        float vm_r_x;
+        float vm_r_y;
+        float vm_r_z;
+        float vm_l_x;
+        float vm_l_y;
+        float vm_l_z;
+        float vm_u_x;
+        float vm_u_y;
+        float vm_u_z;
+        float vm_x;
+        float vm_y;
+        float vm_z;
+
+        float f_x;
+        float f_y;
+        float f_z;
+        float f_farTop;
+        float f_bottom;
+        float f_farLeft;
+        float f_right;
+        float f_nearTop;
+        float f_nearLeft;
+
+        float fov_y;
+        float screenAspectRatio;
+
+        int sectorId;
+
+        float px;
+        float py;
+        float pz;
+    };
+
+    int __cdecl CPSolve(int* pAdjoinVisible, SmithCamera* pSmithCam)
     {
         sithRender_adjoinSafeguard = 0;
+
+        sithRender_numSectors = 0;
+
+        g_pWorld->renderTick = 0;
+        sithRender_lastRenderTick = 1;// we're going to tell everything its at renderTick 0   so this should force them to update
+
 
         // reset sector stuff
         for (int x = 0; x < g_pWorld->numSectors; x++)
@@ -958,6 +1009,55 @@ extern "C"
             adj.visible = pAdjoinVisible[x];
         }
 
-        //sithRender_Clip(g_pCamera->sector, g_pCamera->cameraClipFrustum, 0.0);
+        if (g_pCamera == nullptr)
+        {
+            g_pCamera = new rdCamera;
+
+            g_pCamera->screen_height_half = pSmithCam->screen_height_half;
+            g_pCamera->screen_width_half = pSmithCam->screen_width_half;
+
+
+            g_pCamera->view_matrix.rvec.x = pSmithCam->vm_r_x;
+            g_pCamera->view_matrix.rvec.y = pSmithCam->vm_r_y;
+            g_pCamera->view_matrix.rvec.z = pSmithCam->vm_r_z;
+
+            g_pCamera->view_matrix.lvec.x = pSmithCam->vm_l_x;
+            g_pCamera->view_matrix.lvec.y = pSmithCam->vm_l_y;
+            g_pCamera->view_matrix.lvec.z = pSmithCam->vm_l_z;
+
+            g_pCamera->view_matrix.uvec.x = pSmithCam->vm_u_x;
+            g_pCamera->view_matrix.uvec.y = pSmithCam->vm_u_y;
+            g_pCamera->view_matrix.uvec.z = pSmithCam->vm_u_z;
+
+            g_pCamera->view_matrix.scale.x = pSmithCam->vm_x;
+            g_pCamera->view_matrix.scale.y = pSmithCam->vm_y;
+            g_pCamera->view_matrix.scale.z = pSmithCam->vm_z;
+
+
+            g_pCamera->cameraClipFrustum.field_0.x = pSmithCam->f_x;
+            g_pCamera->cameraClipFrustum.field_0.y = pSmithCam->f_y;
+            g_pCamera->cameraClipFrustum.field_0.z = pSmithCam->f_z;
+
+            g_pCamera->cameraClipFrustum.farTop = pSmithCam->f_farTop;
+            g_pCamera->cameraClipFrustum.bottom = pSmithCam->f_bottom;
+            g_pCamera->cameraClipFrustum.farLeft = pSmithCam->f_farLeft;
+            g_pCamera->cameraClipFrustum.right = pSmithCam->f_right;
+            g_pCamera->cameraClipFrustum.nearTop = pSmithCam->f_nearTop;
+            g_pCamera->cameraClipFrustum.nearLeft = pSmithCam->f_nearLeft;
+
+
+            g_pCamera->fov_y = pSmithCam->fov_y;
+            g_pCamera->screenAspectRatio = pSmithCam->screenAspectRatio;
+
+            g_pCamera->sector = &g_pWorld->sectors[pSmithCam->sectorId];
+
+            g_pCamera->vec3_1.x = pSmithCam->px;
+            g_pCamera->vec3_1.y = pSmithCam->py;
+            g_pCamera->vec3_1.z = pSmithCam->pz;
+        }
+
+        sithRender_Clip(g_pCamera->sector, &g_pCamera->cameraClipFrustum, 0.0);
+
+        return sithRender_numSectors;
     }
 }
