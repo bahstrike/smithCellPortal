@@ -49,10 +49,6 @@ struct rdMeshinfo
 struct rdClipFrustum
 {
     rdVector3 field_0;
-    float orthoLeft;
-    float orthoTop;
-    float orthoRight;
-    float orthoBottom;
     float farTop;
     float bottom;
     float farLeft;
@@ -65,7 +61,6 @@ struct sithSector;
 
 struct sithAdjoin
 {
-    //unsigned int flags;
     sithSector* sector;
     sithAdjoin* mirror;
     sithAdjoin* next;
@@ -74,11 +69,8 @@ struct sithAdjoin
     int renderTick;
     int visible;
 
-    //int type;
-    //int geometryMode;
     int numVertices;
     int* vertexPosIdx;
-    //int matCelAlpha;
     rdVector3 normal;
 };
 
