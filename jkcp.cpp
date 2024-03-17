@@ -61,7 +61,8 @@ struct sithSector;
 
 struct sithAdjoin
 {
-    sithSector* sector;
+    sithSector* sectorOwner;// which sector actually owns this adjoin surface
+    sithSector* sector;// which sector this adjoin points into
     sithAdjoin* mirror;
     sithAdjoin* next;
     float dist;
@@ -114,7 +115,8 @@ struct rdCamera
 
 struct sithWorld
 {
-    int renderTick;
+    int numVertices;
+    int* vertRenderTick;
     rdVector3* vertices;
     rdVector3* verticesTransformed;
     sithSector* sectors;
@@ -709,10 +711,10 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
                 for (int i = 0; i < adjoinIter->numVertices; i++)
                 {
                     v25 = adjoinIter->vertexPosIdx[i];
-                    if (g_pWorld->renderTick != sithRender_lastRenderTick)
+                    if (g_pWorld->vertRenderTick[v25] != sithRender_lastRenderTick)
                     {
                         rdMatrix_TransformPoint34(&g_pWorld->verticesTransformed[v25], &g_pWorld->vertices[v25], &g_pCamera->view_matrix);
-                        g_pWorld->renderTick = sithRender_lastRenderTick;
+                        g_pWorld->vertRenderTick[25] = sithRender_lastRenderTick;
                     }
                 }
                 adjoinIter->renderTick = sithRender_lastRenderTick;
@@ -836,6 +838,7 @@ extern "C"
 
             delete[] g_pWorld->verticesTransformed;
             delete[] g_pWorld->vertices;
+            delete[] g_pWorld->vertRenderTick;
 
             delete g_pWorld;
             g_pWorld = nullptr;
@@ -872,6 +875,7 @@ extern "C"
         CPShutdown();
 
         g_pWorld = new sithWorld;
+        g_pWorld->numVertices = numVertices;
         g_pWorld->vertices = new rdVector3[numVertices];
         for (int x = 0; x < numVertices; x++)
         {
@@ -880,6 +884,7 @@ extern "C"
             g_pWorld->vertices[x].z = pVertices[x*3 + 2];
         }
         g_pWorld->verticesTransformed = new rdVector3[numVertices];// i think this should be same size.  dont bother initializing?
+        g_pWorld->vertRenderTick = new int[numVertices];//we'll zero these at the start of solve
 
         g_pWorld->sectors = new sithSector[numSectors];
         g_pWorld->numSectors = numSectors;
@@ -891,16 +896,11 @@ extern "C"
             const SmithAdjoin& ia = pSmithAdjoins[x];
             sithAdjoin& oa = g_pWorld->adjoins[x];
 
-            oa.sector = &g_pWorld->sectors[ia.sectorID];
+            oa.sectorOwner = &g_pWorld->sectors[ia.sectorID];
             oa.mirror = &g_pWorld->adjoins[ia.mirrorAdjoinID];
             oa.dist = ia.dist;
 
             oa.visible = ia.visible;
-
-            if (ia.numVertices <= 0 || ia.numVertices > 200)
-            {
-                oa = oa;
-            }
 
             oa.numVertices = ia.numVertices;
             oa.vertexPosIdx = new int[ia.numVertices];
@@ -924,7 +924,9 @@ extern "C"
             for (int adjID = 0; adjID < numAdjoins; adjID++)
             {
                 sithAdjoin* adj = &g_pWorld->adjoins[adjID];
-                if (adj->sector != sec)
+
+                adj->sector = adj->mirror->sectorOwner;
+                if (adj->sectorOwner != sec)
                     continue;
 
                 // if first one, set head in sector
@@ -981,13 +983,15 @@ extern "C"
         float pz;
     };
 
-    int __cdecl CPSolve(int* pAdjoinVisible, SmithCamera* pSmithCam)
+    int __cdecl CPSolve(int* pAdjoinVisible, SmithCamera* pSmithCam, int* pVisibleSectors)
     {
         sithRender_adjoinSafeguard = 0;
 
         sithRender_numSectors = 0;
 
-        g_pWorld->renderTick = 0;
+        //g_pWorld->renderTick = 0;
+        for (int x = 0; x < g_pWorld->numVertices; x++)
+            g_pWorld->vertRenderTick[x] = 0;
         sithRender_lastRenderTick = 1;// we're going to tell everything its at renderTick 0   so this should force them to update
 
 
@@ -995,7 +999,7 @@ extern "C"
         for (int x = 0; x < g_pWorld->numSectors; x++)
         {
             sithSector& sec = g_pWorld->sectors[x];
-            
+
             sec.renderTick = 0;
             sec.clipVisited = 0;
         }
@@ -1010,54 +1014,58 @@ extern "C"
         }
 
         if (g_pCamera == nullptr)
-        {
             g_pCamera = new rdCamera;
 
-            g_pCamera->screen_height_half = pSmithCam->screen_height_half;
-            g_pCamera->screen_width_half = pSmithCam->screen_width_half;
+        g_pCamera->screen_height_half = pSmithCam->screen_height_half;
+        g_pCamera->screen_width_half = pSmithCam->screen_width_half;
 
 
-            g_pCamera->view_matrix.rvec.x = pSmithCam->vm_r_x;
-            g_pCamera->view_matrix.rvec.y = pSmithCam->vm_r_y;
-            g_pCamera->view_matrix.rvec.z = pSmithCam->vm_r_z;
+        g_pCamera->view_matrix.rvec.x = pSmithCam->vm_r_x;
+        g_pCamera->view_matrix.rvec.y = pSmithCam->vm_r_y;
+        g_pCamera->view_matrix.rvec.z = pSmithCam->vm_r_z;
 
-            g_pCamera->view_matrix.lvec.x = pSmithCam->vm_l_x;
-            g_pCamera->view_matrix.lvec.y = pSmithCam->vm_l_y;
-            g_pCamera->view_matrix.lvec.z = pSmithCam->vm_l_z;
+        g_pCamera->view_matrix.lvec.x = pSmithCam->vm_l_x;
+        g_pCamera->view_matrix.lvec.y = pSmithCam->vm_l_y;
+        g_pCamera->view_matrix.lvec.z = pSmithCam->vm_l_z;
 
-            g_pCamera->view_matrix.uvec.x = pSmithCam->vm_u_x;
-            g_pCamera->view_matrix.uvec.y = pSmithCam->vm_u_y;
-            g_pCamera->view_matrix.uvec.z = pSmithCam->vm_u_z;
+        g_pCamera->view_matrix.uvec.x = pSmithCam->vm_u_x;
+        g_pCamera->view_matrix.uvec.y = pSmithCam->vm_u_y;
+        g_pCamera->view_matrix.uvec.z = pSmithCam->vm_u_z;
 
-            g_pCamera->view_matrix.scale.x = pSmithCam->vm_x;
-            g_pCamera->view_matrix.scale.y = pSmithCam->vm_y;
-            g_pCamera->view_matrix.scale.z = pSmithCam->vm_z;
-
-
-            g_pCamera->cameraClipFrustum.field_0.x = pSmithCam->f_x;
-            g_pCamera->cameraClipFrustum.field_0.y = pSmithCam->f_y;
-            g_pCamera->cameraClipFrustum.field_0.z = pSmithCam->f_z;
-
-            g_pCamera->cameraClipFrustum.farTop = pSmithCam->f_farTop;
-            g_pCamera->cameraClipFrustum.bottom = pSmithCam->f_bottom;
-            g_pCamera->cameraClipFrustum.farLeft = pSmithCam->f_farLeft;
-            g_pCamera->cameraClipFrustum.right = pSmithCam->f_right;
-            g_pCamera->cameraClipFrustum.nearTop = pSmithCam->f_nearTop;
-            g_pCamera->cameraClipFrustum.nearLeft = pSmithCam->f_nearLeft;
+        g_pCamera->view_matrix.scale.x = pSmithCam->vm_x;
+        g_pCamera->view_matrix.scale.y = pSmithCam->vm_y;
+        g_pCamera->view_matrix.scale.z = pSmithCam->vm_z;
 
 
-            g_pCamera->fov_y = pSmithCam->fov_y;
-            g_pCamera->screenAspectRatio = pSmithCam->screenAspectRatio;
+        g_pCamera->cameraClipFrustum.field_0.x = pSmithCam->f_x;
+        g_pCamera->cameraClipFrustum.field_0.y = pSmithCam->f_y;
+        g_pCamera->cameraClipFrustum.field_0.z = pSmithCam->f_z;
 
-            g_pCamera->sector = &g_pWorld->sectors[pSmithCam->sectorId];
+        g_pCamera->cameraClipFrustum.farTop = pSmithCam->f_farTop;
+        g_pCamera->cameraClipFrustum.bottom = pSmithCam->f_bottom;
+        g_pCamera->cameraClipFrustum.farLeft = pSmithCam->f_farLeft;
+        g_pCamera->cameraClipFrustum.right = pSmithCam->f_right;
+        g_pCamera->cameraClipFrustum.nearTop = pSmithCam->f_nearTop;
+        g_pCamera->cameraClipFrustum.nearLeft = pSmithCam->f_nearLeft;
 
-            g_pCamera->vec3_1.x = pSmithCam->px;
-            g_pCamera->vec3_1.y = pSmithCam->py;
-            g_pCamera->vec3_1.z = pSmithCam->pz;
-        }
+
+        g_pCamera->fov_y = pSmithCam->fov_y;
+        g_pCamera->screenAspectRatio = pSmithCam->screenAspectRatio;
+
+        g_pCamera->sector = &g_pWorld->sectors[pSmithCam->sectorId];
+
+        g_pCamera->vec3_1.x = pSmithCam->px;
+        g_pCamera->vec3_1.y = pSmithCam->py;
+        g_pCamera->vec3_1.z = pSmithCam->pz;
+
 
         sithRender_Clip(g_pCamera->sector, &g_pCamera->cameraClipFrustum, 0.0);
 
+
+        for (int x = 0; x < sithRender_numSectors; x++)
+        {
+            pVisibleSectors[x] = sithRender_aSectors[x] - g_pWorld->sectors;
+        }
         return sithRender_numSectors;
     }
 }
