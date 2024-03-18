@@ -816,7 +816,7 @@ void sithRender_Clip(sithSector* sector, rdClipFrustum* frustumArg, float a3)
                 //if (sithPlayer_bNoClippingRend) continue;
 
                 float a3a = adjoinIter->dist + adjoinIter->mirror->dist + a3;
-                if(a3a < 0.0)//if (!(sithRender_flag & 4) || a3a < sithRender_f_82F4B0) // wtf is with this float?
+                //if(a3a < 0.0)//if (!(sithRender_flag & 4) || a3a < sithRender_f_82F4B0) // wtf is with this float?
                     sithRender_Clip(adjoinIter->sector, v31, a3a);
             }
         }
